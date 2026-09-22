@@ -1,0 +1,1202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<meta name="color-scheme" content="dark">
+<title>the wall</title>
+
+<!--
+  ────────────────────────────────────────────────
+  the wall · single-file anonymous message board
+  ────────────────────────────────────────────────
+  • host on GitHub Pages: just drop this file in your repo as index.html
+  • no build step, no npm, no server — everything is CDN + Firebase RTDB
+  • photos are auto-compressed client-side and stored as base64 in the DB
+  ────────────────────────────────────────────────
+-->
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+*,*::before,*::after{box-sizing:border-box}
+
+:root{
+  --bg:#000;
+  --line:rgba(255,255,255,.07);
+  --line-2:rgba(255,255,255,.13);
+  --txt:#f3f3f8;
+  --muted:#6d6d7c;
+  --muted-2:#4b4b58;
+  --purple:#a855f7;
+  --pink:#ec4899;
+  --cyan:#22d3ee;
+  --ok:#22c55e;
+  --cool:5000ms;
+}
+
+html,body{height:100%}
+body{
+  margin:0;background:#000;color:var(--txt);overflow:hidden;
+  font-family:'Space Grotesk',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  -webkit-font-smoothing:antialiased;
+  -webkit-tap-highlight-color:transparent;
+  text-rendering:optimizeLegibility;
+}
+
+/* ambient background */
+body::before{
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:
+    radial-gradient(58vw 58vw at 8% -14%, rgba(168,85,247,.20), transparent 62%),
+    radial-gradient(52vw 52vw at 102% 2%, rgba(236,72,153,.14), transparent 62%),
+    radial-gradient(70vw 70vw at 50% 118%, rgba(34,211,238,.09), transparent 62%);
+}
+body::after{
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.5;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E");
+}
+
+.hidden{display:none!important}
+button{font-family:inherit}
+
+/* ═══════════ GATE ═══════════ */
+#gate{
+  position:relative;z-index:2;height:100dvh;
+  display:flex;align-items:center;justify-content:center;padding:18px;
+  overflow-y:auto;
+}
+.card{
+  width:100%;max-width:440px;padding:30px 26px 26px;border-radius:30px;
+  background:rgba(255,255,255,.035);
+  border:1px solid rgba(255,255,255,.08);
+  backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);
+  box-shadow:0 40px 110px rgba(0,0,0,.9), inset 0 1px 0 rgba(255,255,255,.07);
+  animation:rise .5s cubic-bezier(.2,.9,.3,1);
+}
+@keyframes rise{from{opacity:0;transform:translateY(18px) scale(.98)}to{opacity:1;transform:none}}
+
+.brandmark{
+  width:44px;height:44px;border-radius:14px;margin-bottom:18px;
+  background:linear-gradient(135deg,#a855f7,#ec4899 55%,#22d3ee);
+  box-shadow:0 10px 30px rgba(168,85,247,.4);
+  display:grid;place-items:center;
+}
+.brandmark::after{
+  content:'';width:15px;height:15px;border-radius:50%;
+  background:#000;box-shadow:inset 0 0 0 3px rgba(255,255,255,.85);
+}
+
+.card h1{
+  margin:0 0 9px;font-size:clamp(27px,7.6vw,34px);font-weight:700;letter-spacing:-.04em;line-height:1.05;
+  background:linear-gradient(100deg,#fff 4%,#c084fc 48%,#f472b6 96%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.sub{margin:0 0 22px;color:#7a7a8a;font-size:13.5px;line-height:1.6}
+
+.avs{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 14px;scrollbar-width:none}
+.avs::-webkit-scrollbar{display:none}
+.av{
+  flex:0 0 auto;width:46px;height:46px;border-radius:15px;cursor:pointer;
+  border:1px solid rgba(255,255,255,.1);background:#101015;
+  font-size:19px;font-weight:700;color:#8b8b99;
+  display:grid;place-items:center;transition:.18s;
+}
+.av:hover{transform:translateY(-2px);border-color:rgba(255,255,255,.28)}
+.av.sel{border-color:#a855f7;background:#17101f;box-shadow:0 0 0 3px rgba(168,85,247,.22)}
+
+input.field,textarea.field{
+  width:100%;background:#0c0c11;border:1px solid #23232a;border-radius:16px;
+  padding:15px 16px;color:#fff;font-size:16px;font-family:inherit;outline:none;
+  transition:.2s;resize:none;
+}
+input.field:focus,textarea.field:focus{border-color:#a855f7;box-shadow:0 0 0 4px rgba(168,85,247,.15)}
+input.field::placeholder,textarea.field::placeholder{color:#55555f}
+
+.btn{
+  width:100%;margin-top:14px;padding:16px;border:0;border-radius:16px;cursor:pointer;
+  font-size:16px;font-weight:700;letter-spacing:-.01em;color:#fff;
+  background:linear-gradient(100deg,#a855f7,#ec4899);
+  box-shadow:0 12px 34px rgba(168,85,247,.32);transition:.18s;
+}
+.btn:hover{transform:translateY(-1px);box-shadow:0 16px 42px rgba(236,72,153,.44)}
+.btn:active{transform:translateY(1px) scale(.99)}
+
+.err{min-height:20px;margin-top:10px;font-size:13px;font-weight:500;color:#ff6b81}
+.shake{animation:shake .4s}
+@keyframes shake{
+  0%,100%{transform:translateX(0)}
+  20%{transform:translateX(-9px)}40%{transform:translateX(8px)}
+  60%{transform:translateX(-5px)}80%{transform:translateX(3px)}
+}
+
+/* ═══════════ APP SHELL ═══════════ */
+#app{position:relative;z-index:2;height:100dvh;display:flex;flex-direction:column}
+
+header{
+  flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:12px 16px;border-bottom:1px solid var(--line);
+  background:rgba(0,0,0,.5);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+}
+.brand{display:flex;align-items:center;gap:11px;min-width:0}
+.brand-mark{
+  width:32px;height:32px;border-radius:11px;flex:0 0 auto;
+  background:linear-gradient(135deg,#a855f7,#ec4899 55%,#22d3ee);
+  box-shadow:0 6px 20px rgba(168,85,247,.38);
+  display:grid;place-items:center;
+}
+.brand-mark::after{content:'';width:10px;height:10px;border-radius:50%;background:#000;box-shadow:inset 0 0 0 2.5px rgba(255,255,255,.9)}
+.brand-text{display:flex;flex-direction:column;min-width:0}
+.brand-name{font-size:15px;font-weight:700;letter-spacing:-.02em;line-height:1.1}
+.brand-sub{font-size:10.5px;color:var(--muted-2);letter-spacing:.1em;text-transform:uppercase;font-weight:600}
+
+.header-right{display:flex;align-items:center;gap:10px}
+.live{
+  display:flex;align-items:center;gap:7px;font-size:10.5px;font-weight:700;
+  letter-spacing:.16em;text-transform:uppercase;color:#5e5e6c;
+}
+.dot{width:7px;height:7px;border-radius:50%;background:#3a3a44;transition:.35s}
+.dot.on{background:var(--ok);box-shadow:0 0 12px var(--ok)}
+
+.me{
+  display:flex;align-items:center;gap:8px;cursor:pointer;
+  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);
+  border-radius:999px;padding:4px 13px 4px 4px;font-size:13px;font-weight:600;
+  color:var(--txt);max-width:44vw;transition:.18s;
+}
+.me:hover{background:rgba(255,255,255,.1)}
+.me .mini{
+  width:27px;height:27px;border-radius:50%;display:grid;place-items:center;
+  font-size:12px;font-weight:700;color:#fff;flex:0 0 auto;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.16);
+}
+.me span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ═══════════ STAGE ═══════════ */
+.stage{
+  flex:1;min-height:0;display:grid;
+  grid-template-columns:minmax(330px,410px) minmax(0,1fr);
+}
+
+/* ── left: the wall ── */
+.wall-panel{
+  display:flex;flex-direction:column;min-height:0;
+  border-right:1px solid var(--line);
+  background:linear-gradient(180deg,rgba(255,255,255,.022),transparent 26%);
+}
+.wall-head{
+  flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;
+  padding:16px 18px 12px;border-bottom:1px solid rgba(255,255,255,.045);
+}
+.kicker{
+  margin:0;font-size:10px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--muted-2);
+}
+.wall-title{margin:3px 0 0;font-size:17px;font-weight:700;letter-spacing:-.03em}
+.count-pill{
+  font-size:11.5px;font-weight:700;color:#c9c9d6;
+  background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.09);
+  padding:4px 11px;border-radius:999px;min-width:36px;text-align:center;
+}
+
+#wall{
+  flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+  padding:8px 10px 22px;display:flex;flex-direction:column;gap:3px;
+  scrollbar-width:thin;scrollbar-color:#22222b transparent;
+}
+#wall::-webkit-scrollbar{width:8px}
+#wall::-webkit-scrollbar-thumb{background:#1e1e26;border-radius:99px}
+#wall::-webkit-scrollbar-thumb:hover{background:#2c2c37}
+#wall::-webkit-scrollbar-track{background:transparent}
+
+.empty{
+  margin:auto;text-align:center;color:#4d4d59;font-size:14px;line-height:1.75;padding:44px 24px;
+}
+.empty b{display:block;font-size:36px;margin-bottom:12px;filter:saturate(.6)}
+
+.msg{
+  display:flex;gap:11px;padding:11px 12px;border-radius:18px;
+  border:1px solid transparent;transition:background .2s,border-color .2s;
+  animation:pop .32s cubic-bezier(.2,.85,.3,1);
+}
+.msg:hover{background:rgba(255,255,255,.032);border-color:rgba(255,255,255,.065)}
+@keyframes pop{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+.pfp{
+  flex:0 0 auto;width:42px;height:42px;border-radius:50%;display:grid;place-items:center;
+  font-size:18px;font-weight:700;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.45);
+  user-select:none;box-shadow:inset 0 0 0 1px rgba(255,255,255,.15);
+}
+.body{flex:1;min-width:0}
+.top{display:flex;align-items:center;gap:7px;margin-bottom:3px}
+.nm{
+  font-size:14px;font-weight:700;letter-spacing:-.01em;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.you{
+  flex:0 0 auto;font-size:8.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;
+  color:#fff;padding:2.5px 6px;border-radius:6px;
+  background:linear-gradient(100deg,#a855f7,#ec4899);
+}
+.tm{flex:0 0 auto;margin-left:auto;font-size:11px;color:#5b5b68;white-space:nowrap}
+.tx{
+  font-size:14.5px;line-height:1.5;color:#e6e6ef;
+  white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;
+}
+.msgimg{
+  display:block;margin-top:9px;max-width:100%;max-height:300px;width:auto;
+  border-radius:14px;border:1px solid rgba(255,255,255,.09);
+  cursor:zoom-in;background:#0a0a0e;transition:.2s;
+}
+.msgimg:hover{border-color:rgba(255,255,255,.22);filter:brightness(1.06)}
+
+/* ── right: composer ── */
+.composer-panel{
+  position:relative;min-height:0;overflow-y:auto;
+  display:flex;flex-direction:column;justify-content:center;
+  padding:34px clamp(20px,4.5vw,60px);
+}
+.composer-panel::before{
+  content:'';position:absolute;top:-140px;right:-140px;width:420px;height:420px;
+  border-radius:50%;pointer-events:none;
+  background:radial-gradient(circle,rgba(168,85,247,.17),transparent 68%);
+  animation:float 13s ease-in-out infinite;
+}
+@keyframes float{0%,100%{transform:translate(0,0)}50%{transform:translate(-32px,34px)}}
+
+.composer-inner{position:relative;width:100%;max-width:560px;margin:0 auto}
+.headline{
+  margin:3px 0 18px;font-size:clamp(28px,4.4vw,42px);font-weight:700;
+  letter-spacing:-.045em;line-height:1.03;
+  background:linear-gradient(102deg,#fff 8%,#c084fc 52%,#f472b6 96%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.headline em{font-style:normal;color:var(--cyan);-webkit-text-fill-color:var(--cyan)}
+
+/* emoji strip */
+.emojis{display:flex;gap:6px;overflow-x:auto;padding-bottom:12px;scrollbar-width:none}
+.emojis::-webkit-scrollbar{display:none}
+.emo{
+  flex:0 0 auto;width:38px;height:38px;border-radius:12px;cursor:pointer;
+  border:1px solid rgba(255,255,255,.07);background:#0e0e14;font-size:18px;
+  display:grid;place-items:center;transition:.15s;padding:0;
+}
+.emo:hover{background:#1b1b24;transform:translateY(-2px);border-color:rgba(255,255,255,.16)}
+.emo:active{transform:scale(.94)}
+
+/* input */
+.inputwrap{
+  border:1px solid #23232b;border-radius:20px;background:#0b0b10;
+  transition:.2s;overflow:hidden;
+}
+.inputwrap:focus-within{border-color:#a855f7;box-shadow:0 0 0 4px rgba(168,85,247,.14)}
+.inputwrap.drag{border-color:var(--cyan);box-shadow:0 0 0 4px rgba(34,211,238,.16);background:#08131a}
+.ta{
+  width:100%;border:0;background:transparent;padding:16px 18px 6px;
+  color:#fff;font-size:15.5px;line-height:1.5;font-family:inherit;outline:none;
+  resize:none;min-height:78px;max-height:200px;
+}
+.ta::placeholder{color:#52525d}
+.inputfoot{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:6px 12px 11px 18px;
+}
+.count{font-size:11px;color:var(--muted-2);font-variant-numeric:tabular-nums;font-weight:600}
+.count.warn{color:#f0a02a}
+.attach{
+  display:inline-flex;align-items:center;gap:6px;cursor:pointer;
+  border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.045);
+  color:#c9c9d6;font-size:12.5px;font-weight:600;padding:7px 13px;border-radius:999px;
+  transition:.18s;
+}
+.attach:hover{background:rgba(255,255,255,.1);color:#fff;border-color:rgba(255,255,255,.2)}
+.attach.on{border-color:var(--cyan);color:#7ee7f7;background:rgba(34,211,238,.1)}
+
+/* preview */
+.preview{
+  position:relative;margin-top:12px;border-radius:18px;overflow:hidden;
+  border:1px solid rgba(255,255,255,.11);background:#0a0a0e;
+  animation:pop .3s cubic-bezier(.2,.85,.3,1);
+}
+.preview img{display:block;width:100%;max-height:230px;object-fit:cover}
+.preview-x{
+  position:absolute;top:9px;right:9px;width:30px;height:30px;border-radius:50%;
+  border:1px solid rgba(255,255,255,.18);background:rgba(0,0,0,.72);
+  color:#fff;font-size:14px;cursor:pointer;display:grid;place-items:center;
+  backdrop-filter:blur(8px);transition:.18s;
+}
+.preview-x:hover{background:rgba(236,72,153,.85);border-color:transparent}
+.preview-meta{
+  padding:8px 14px;font-size:11.5px;color:var(--muted);font-weight:600;
+  border-top:1px solid rgba(255,255,255,.07);letter-spacing:.02em;
+}
+
+/* actions */
+.actions{display:flex;align-items:center;gap:16px;margin-top:18px}
+
+.send{
+  position:relative;flex:0 0 auto;width:62px;height:62px;border-radius:50%;border:0;
+  cursor:pointer;color:#fff;display:grid;place-items:center;
+  background:linear-gradient(125deg,#a855f7,#ec4899);
+  box-shadow:0 12px 34px rgba(168,85,247,.38);
+  transition:transform .18s, box-shadow .18s, filter .25s;
+}
+.send:hover:not(:disabled){transform:scale(1.06);box-shadow:0 16px 44px rgba(236,72,153,.5)}
+.send:active:not(:disabled){transform:scale(.95)}
+.send:disabled{cursor:not-allowed}
+.send.cooling{filter:grayscale(.55) brightness(.72);box-shadow:none}
+.send .ring{
+  position:absolute;inset:-7px;width:calc(100% + 14px);height:calc(100% + 14px);
+  transform:rotate(-90deg);pointer-events:none;
+}
+.ring circle{fill:none;stroke-width:4}
+.ring-bg{stroke:rgba(255,255,255,.07)}
+.ring-fg{
+  stroke:url(#ringgrad);stroke-linecap:round;
+  stroke-dasharray:339.292;stroke-dashoffset:339.292;
+}
+.send-ico{display:grid;place-items:center;line-height:1}
+.send-num{
+  display:none;font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;
+}
+.send.cooling .send-ico{display:none}
+.send.cooling .send-num{display:block}
+
+.action-text{min-width:0}
+.action-title{font-size:14.5px;font-weight:700;letter-spacing:-.01em}
+.action-sub{font-size:12px;color:var(--muted);margin-top:2px}
+
+.footnote{
+  margin:22px 0 0;font-size:11.5px;line-height:1.65;color:var(--muted-2);
+  border-top:1px solid rgba(255,255,255,.055);padding-top:14px;
+}
+
+/* toast */
+#toast{
+  position:fixed;left:50%;bottom:34px;transform:translate(-50%,20px);z-index:80;
+  background:#15151d;border:1px solid rgba(255,255,255,.11);color:#ffd7de;
+  padding:12px 20px;border-radius:15px;font-size:13.5px;font-weight:500;
+  opacity:0;pointer-events:none;transition:.26s;box-shadow:0 16px 50px rgba(0,0,0,.75);
+  max-width:88vw;text-align:center;
+}
+#toast.show{opacity:1;transform:translate(-50%,0)}
+
+/* lightbox */
+.lightbox{
+  position:fixed;inset:0;z-index:90;background:rgba(0,0,0,.92);
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  display:grid;place-items:center;padding:26px;cursor:zoom-out;
+  animation:fade .22s ease;
+}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+.lightbox img{
+  max-width:100%;max-height:100%;border-radius:18px;
+  box-shadow:0 40px 120px rgba(0,0,0,.9);border:1px solid rgba(255,255,255,.1);
+}
+.lb-x{
+  position:absolute;top:20px;right:20px;width:42px;height:42px;border-radius:50%;
+  border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.07);
+  color:#fff;font-size:17px;cursor:pointer;display:grid;place-items:center;
+  transition:.18s;backdrop-filter:blur(10px);
+}
+.lb-x:hover{background:rgba(236,72,153,.85);border-color:transparent}
+
+/* ── mobile ── */
+@media (max-width:880px){
+  .stage{grid-template-columns:1fr;grid-template-rows:minmax(0,1fr) auto}
+  .wall-panel{border-right:0;border-bottom:1px solid var(--line)}
+  .composer-panel{
+    justify-content:flex-start;overflow-y:auto;max-height:62dvh;
+    padding:16px 14px calc(16px + env(safe-area-inset-bottom));
+    border-top:1px solid var(--line);background:rgba(0,0,0,.55);
+    backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  }
+  .composer-panel::before{display:none}
+  .composer-inner{max-width:100%}
+  .headline{font-size:22px;margin-bottom:12px}
+  .kicker{display:none}
+  .emojis{padding-bottom:9px}
+  .emo{width:34px;height:34px;font-size:16px;border-radius:10px}
+  .ta{min-height:56px;padding:13px 15px 4px;font-size:15px}
+  .inputfoot{padding:4px 10px 9px 15px}
+  .actions{margin-top:13px;gap:13px}
+  .send{width:54px;height:54px}
+  .footnote{display:none}
+  .brand-sub{display:none}
+  .wall-head{padding:12px 15px 10px}
+  #toast{bottom:calc(22px + env(safe-area-inset-bottom))}
+}
+</style>
+</head>
+<body>
+
+<!-- ══════════ GATE ══════════ -->
+<div id="gate">
+  <div class="card" id="card">
+    <div class="brandmark"></div>
+    <h1>enter ur name</h1>
+    <p class="sub">
+      real names only — no nicknames, no numbers, no keyboard smashing.
+      keep it clean or the filter eats it. ✌️
+    </p>
+
+    <div class="avs" id="avs"></div>
+
+    <input id="nameInput" class="field" type="text" placeholder="ur name…"
+           maxlength="20" autocomplete="off" autocapitalize="words" spellcheck="false">
+    <div class="err" id="err"></div>
+    <button class="btn" id="enterBtn">enter the wall →</button>
+  </div>
+</div>
+
+<!-- ══════════ APP ══════════ -->
+<div id="app" class="hidden">
+
+  <header>
+    <div class="brand">
+      <div class="brand-mark"></div>
+      <div class="brand-text">
+        <span class="brand-name">the wall</span>
+        <span class="brand-sub">anonymous-ish</span>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="live"><span class="dot" id="dot"></span>live</div>
+      <button class="me" id="meChip" title="tap to change name">
+        <span class="mini" id="meMini"></span>
+        <span id="meName"></span>
+      </button>
+    </div>
+  </header>
+
+  <div class="stage">
+
+    <!-- LEFT: the wall -->
+    <section class="wall-panel">
+      <div class="wall-head">
+        <div>
+          <p class="kicker">live feed</p>
+          <h3 class="wall-title">the wall</h3>
+        </div>
+        <div class="count-pill" id="msgCount">0</div>
+      </div>
+      <main id="wall"></main>
+    </section>
+
+    <!-- RIGHT: composer -->
+    <section class="composer-panel" id="dropzone">
+      <div class="composer-inner">
+        <p class="kicker">drop a message</p>
+        <h2 class="headline">say it <em>loud</em>.</h2>
+
+        <div class="emojis" id="emojis"></div>
+
+        <div class="inputwrap" id="inputwrap">
+          <textarea id="msgInput" class="ta" rows="3" maxlength="300"
+                    placeholder="type something…  (drag a photo here too)"></textarea>
+          <div class="inputfoot">
+            <span class="count" id="count">0 / 300</span>
+            <button class="attach" id="attachBtn" type="button">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+                <path d="M12 5v14M5 12h14"/>
+              </svg>
+              photo
+            </button>
+          </div>
+        </div>
+
+        <div class="preview hidden" id="preview">
+          <img id="previewImg" alt="preview">
+          <button class="preview-x" id="previewX" type="button">✕</button>
+          <div class="preview-meta" id="previewMeta"></div>
+        </div>
+
+        <div class="actions">
+          <button class="send" id="sendBtn" aria-label="send">
+            <svg class="ring" viewBox="0 0 120 120" aria-hidden="true">
+              <defs>
+                <linearGradient id="ringgrad" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stop-color="#22d3ee"/>
+                  <stop offset="100%" stop-color="#ec4899"/>
+                </linearGradient>
+              </defs>
+              <circle class="ring-bg" cx="60" cy="60" r="54"/>
+              <circle class="ring-fg" cx="60" cy="60" r="54" id="ringFg"/>
+            </svg>
+            <span class="send-ico" id="sendIco">
+              <svg width="21" height="21" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M3.4 20.4l17.45-7.48a1 1 0 000-1.84L3.4 3.6a1 1 0 00-1.4.92v4.6a1 1 0 00.76.97l10.4 2.6-10.4 2.6a1 1 0 00-.76.97v4.6a1 1 0 001.4.92z"/>
+              </svg>
+            </span>
+            <span class="send-num" id="sendNum"></span>
+          </button>
+
+          <div class="action-text">
+            <div class="action-title" id="actionTitle">send it</div>
+            <div class="action-sub" id="actionSub">be nice · 5s cooldown</div>
+          </div>
+        </div>
+
+        <p class="footnote">
+          photos auto-compress before upload · keep it school-safe ·
+          hate speech gets filtered automatically
+        </p>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<input type="file" id="fileInput" accept="image/*" class="hidden">
+
+<div id="toast"></div>
+
+<div class="lightbox hidden" id="lightbox">
+  <img id="lightboxImg" alt="">
+  <button class="lb-x" id="lbClose" type="button">✕</button>
+</div>
+
+<script type="module">
+/* ═══════════════ FIREBASE ═══════════════ */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-analytics.js";
+import {
+  getDatabase, ref, push, query, limitToLast, onChildAdded, onValue, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAuGhM9vRxXDjJkisQwaUu860Mk8c3HCzY",
+  authDomain: "snapchat-4b6cb.firebaseapp.com",
+  databaseURL: "https://snapchat-4b6cb-default-rtdb.firebaseio.com",
+  projectId: "snapchat-4b6cb",
+  storageBucket: "snapchat-4b6cb.firebasestorage.app",
+  messagingSenderId: "545400181817",
+  appId: "1:545400181817:web:24dc5d5a46d75a8d6f69e8",
+  measurementId: "G-D8WMNSJC84"
+};
+
+const fbApp = initializeApp(firebaseConfig);
+const db = getDatabase(fbApp);
+try { getAnalytics(fbApp); } catch (_) { /* analytics blocked — fine */ }
+
+/* ═══════════════ CONFIG ═══════════════ */
+const COOLDOWN     = 5000;       // 5 second slow mode
+const MAX_MESSAGES = 80;         // messages loaded from the feed
+const MAX_IMG_BYTES = 120000;    // ~120kb base64 budget per photo
+const RING_CIRC    = 339.292;    // 2 * π * 54
+
+/* ═══════════════ FILTER ENGINE ═══════════════ */
+const LEET = {'0':'o','1':'i','!':'i','|':'i','3':'e','4':'a','@':'a','5':'s',
+              '$':'s','7':'t','+':'t','8':'b','9':'g','2':'z'};
+
+const BAD = new Set([
+  'fuck','fuk','fck','fucks','fucked','fucker','fuckers','fucking','fuckface','motherfucker','motherfuckers',
+  'shit','shits','shitty','bullshit','dipshit',
+  'bitch','bitches','bitchy','cunt','cunts','dick','dicks','dickhead','cock','cocks','pussy',
+  'asshole','assholes','bastard','slut','sluts','whore','whores','hoe','thot',
+  'nigga','niggas','nigger','niggers','fag','fags','faggot','faggots',
+  'retard','retards','retarded','rape','raped','rapist','rapists','porn','porno',
+  'nazi','hitler','kys','kms','pedo','pedos','pedophile','molest','molested',
+  'ass','asses','dumbass','jackass','wtf','stfu','lmfao','poop','poopoo','fart',
+  'butt','butthole','boob','boobs','titties','penis','vagina','anus','cum','semen','dildo'
+]);
+
+function tokensOf(str) {
+  return String(str).toLowerCase().split(/[^a-z0-9!|@$+]+/).filter(Boolean);
+}
+function variants(raw) {
+  const base = [...raw].map(c => LEET[c] ?? c).join('').replace(/[^a-z]/g, '');
+  return [base, base.replace(/(.)\1{2,}/g, '$1'), base.replace(/(.)\1{2,}/g, '$1$1')];
+}
+function isBadToken(tok) {
+  return variants(tok).some(v => v && BAD.has(v));
+}
+function hasProfanity(str) { return tokensOf(str).some(isBadToken); }
+function maskProfanity(text) {
+  return String(text).replace(/\S+/g, w => (isBadToken(w) ? '✱'.repeat(w.length) : w));
+}
+
+/* fake names */
+const FAKE = new Set([
+  'asdf','asdfasdf','asdfgh','qwerty','qwertyuiop','zxcvbn','test','testing','tester','tests',
+  'user','users','username','admin','administrator','root','guest','anonymous','anon','null',
+  'undefined','none','name','myname','yourname','firstname','lastname','fullname','nickname',
+  'me','myself','nobody','someone','somebody','person','human','dude','bro','bruh','guy','man',
+  'xxx','abc','abcd','abcdef','aaa','bbb','zzz','lorem','ipsum','placeholder','example'
+]);
+
+function titleCase(s) { return s.replace(/\b([a-z])/g, (_, c) => c.toUpperCase()); }
+
+function validateName(input) {
+  const raw = String(input || '').trim().replace(/\s+/g, ' ');
+
+  if (!raw) return { ok: false, msg: 'type ur name first 😭' };
+  if (raw.length < 2) return { ok: false, msg: 'that is way too short' };
+  if (raw.length > 20) return { ok: false, msg: 'too long — keep it under 20' };
+  if (!/^[A-Za-z][A-Za-z' -]*$/.test(raw)) return { ok: false, msg: 'letters only — no numbers or symbols' };
+
+  const letters = raw.replace(/[^A-Za-z]/g, '');
+  if (letters.length < 2) return { ok: false, msg: 'that is not a name' };
+  if (/(.)\1{2,}/i.test(raw)) return { ok: false, msg: 'that is not a real name' };
+  if (!/[aeiouy]/i.test(letters)) return { ok: false, msg: 'that is not a real name' };
+  if (/[bcdfghjklmnpqrstvwxz]{5,}/i.test(letters)) return { ok: false, msg: 'that looks like keyboard smash' };
+
+  const words = raw.toLowerCase().split(/[^a-z]+/).filter(Boolean);
+  if (words.length === 1 && words[0].length >= 6 && new Set(words[0]).size <= 3) {
+    return { ok: false, msg: 'that is not a real name' };
+  }
+  if (words.length > 1 && new Set(words).size === 1) {
+    return { ok: false, msg: 'that is not a real name' };
+  }
+  for (const w of words) {
+    if (FAKE.has(w)) return { ok: false, msg: 'nah, use ur actual name' };
+  }
+  if (hasProfanity(raw)) return { ok: false, msg: 'keep it clean 🧼' };
+
+  return { ok: true, name: titleCase(raw) };
+}
+
+/* ═══════════════ HELPERS ═══════════════ */
+const $ = s => document.querySelector(s);
+
+function hashStr(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+function gradFor(name) {
+  const h = hashStr(String(name || '?')) % 360;
+  return `linear-gradient(135deg, hsl(${h} 85% 58%), hsl(${(h + 58) % 360} 85% 44%))`;
+}
+function initials(name) {
+  const parts = String(name || '?').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
+function timeLabel(ts) {
+  const d = new Date(ts || Date.now());
+  const now = new Date();
+  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  if (d.toDateString() === now.toDateString()) return time;
+  const y = new Date(now); y.setDate(y.getDate() - 1);
+  if (d.toDateString() === y.toDateString()) return 'yesterday ' + time;
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' · ' + time;
+}
+function uid() { return 'u' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36); }
+
+let toastTimer;
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+/* ═══════════════ IMAGE COMPRESSION ═══════════════ */
+async function loadBitmap(file) {
+  if ('createImageBitmap' in window) {
+    try { return await createImageBitmap(file, { imageOrientation: 'from-image' }); }
+    catch (_) { /* fall through */ }
+  }
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => res(img);
+    img.onerror = () => rej(new Error('bad image'));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+/**
+ * Downscales + compresses an image so the base64 payload fits in the DB.
+ * Returns { data, bytes } where data is a data: URL.
+ */
+async function compressImage(file, maxDim = 760, maxBytes = MAX_IMG_BYTES) {
+  if (!file || !file.type || !file.type.startsWith('image/')) {
+    throw new Error('not an image');
+  }
+  const bmp = await loadBitmap(file);
+  const sw = bmp.width, sh = bmp.height;
+
+  let scale = Math.min(1, maxDim / Math.max(sw, sh));
+  let w = Math.max(1, Math.round(sw * scale));
+  let h = Math.max(1, Math.round(sh * scale));
+
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+
+  const draw = () => {
+    canvas.width = w;
+    canvas.height = h;
+    ctx.fillStyle = '#0b0b0f';
+    ctx.fillRect(0, 0, w, h);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(bmp, 0, 0, w, h);
+  };
+
+  draw();
+  let q = 0.72;
+  let out = canvas.toDataURL('image/jpeg', q);
+  let guard = 0;
+
+  while (out.length > maxBytes && guard < 10) {
+    q -= 0.1;
+    if (q < 0.32) {
+      w = Math.max(1, Math.round(w * 0.8));
+      h = Math.max(1, Math.round(h * 0.8));
+      draw();
+      q = 0.6;
+    }
+    out = canvas.toDataURL('image/jpeg', q);
+    guard++;
+  }
+
+  if (out.length > maxBytes * 1.6) throw new Error('image too big');
+
+  if (bmp.close) { try { bmp.close(); } catch (_) {} }
+  return { data: out, bytes: out.length };
+}
+
+/* ═══════════════ STATE ═══════════════ */
+const AVATARS = ['', '😎', '🔥', '💀', '👽', '🤖', '🐐', '🦋', '⚡', '🌙', '🍄', '👾', '🎧'];
+const EMOJIS  = ['😂','💀','🔥','😭','✨','👀','💅','😎','🤝','🙏','❤️','😅','🫡','🥀','⚡','🎧','😮‍💨','🧢','🕺','💯'];
+
+const me = { name: '', avatar: '', uid: '' };
+
+let listening    = false;
+let sending      = false;
+let cooldownEnd  = 0;
+let lastText     = '';
+let pendingImage = null;   // data URL
+let msgTotal     = 0;
+let emptyNode    = null;
+
+const wall      = $('#wall');
+const msgInput  = $('#msgInput');
+const sendBtn   = $('#sendBtn');
+const sendIco   = $('#sendIco');
+const sendNum   = $('#sendNum');
+const ringFg    = $('#ringFg');
+const fileInput = $('#fileInput');
+
+/* ═══════════════ GATE UI ═══════════════ */
+let pickedAvatar = '';
+
+function buildAvatarPicker() {
+  const box = $('#avs');
+  box.innerHTML = '';
+  AVATARS.forEach((a, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'av' + (i === 0 ? ' sel' : '');
+    b.textContent = a || 'Aa';
+    b.title = a ? 'avatar' : 'auto (initials)';
+    b.addEventListener('click', () => {
+      pickedAvatar = a;
+      [...box.children].forEach(c => c.classList.remove('sel'));
+      b.classList.add('sel');
+    });
+    box.appendChild(b);
+  });
+}
+buildAvatarPicker();
+
+const nameInput = $('#nameInput');
+const errBox    = $('#err');
+
+nameInput.addEventListener('input', () => { errBox.textContent = ''; });
+
+function fail(msg) {
+  errBox.textContent = msg;
+  const card = $('#card');
+  card.classList.remove('shake');
+  void card.offsetWidth;
+  card.classList.add('shake');
+}
+
+function enter() {
+  const res = validateName(nameInput.value);
+  if (!res.ok) return fail(res.msg);
+
+  me.name   = res.name;
+  me.avatar = pickedAvatar;
+  me.uid    = uid();
+
+  localStorage.setItem('wall.name', me.name);
+  localStorage.setItem('wall.avatar', me.avatar);
+  localStorage.setItem('wall.uid', me.uid);
+
+  startApp();
+}
+
+$('#enterBtn').addEventListener('click', enter);
+nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') enter(); });
+
+/* ═══════════════ APP BOOT ═══════════════ */
+function paintMe() {
+  const mini = $('#meMini');
+  mini.style.background = gradFor(me.name);
+  mini.textContent = me.avatar || initials(me.name);
+  $('#meName').textContent = me.name;
+}
+
+function startApp() {
+  $('#gate').classList.add('hidden');
+  $('#app').classList.remove('hidden');
+  paintMe();
+  buildEmojiBar();
+  listen();
+  setTimeout(() => msgInput.focus(), 260);
+}
+
+$('#meChip').addEventListener('click', () => {
+  if (!confirm('change ur name? the wall reloads.')) return;
+  localStorage.removeItem('wall.name');
+  localStorage.removeItem('wall.avatar');
+  location.reload();
+});
+
+/* connection indicator */
+function watchConnection() {
+  onValue(ref(db, '.info/connected'), snap => {
+    $('#dot').classList.toggle('on', snap.val() === true);
+  });
+}
+
+/* emoji quick bar */
+function buildEmojiBar() {
+  const bar = $('#emojis');
+  bar.innerHTML = '';
+  EMOJIS.forEach(e => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'emo';
+    b.textContent = e;
+    b.addEventListener('click', () => {
+      msgInput.value += e;
+      updateCount();
+      msgInput.focus();
+    });
+    bar.appendChild(b);
+  });
+}
+
+/* character counter */
+function updateCount() {
+  const el = $('#count');
+  const n = msgInput.value.length;
+  el.textContent = `${n} / 300`;
+  el.classList.toggle('warn', n > 260);
+}
+msgInput.addEventListener('input', () => {
+  updateCount();
+  autoGrow();
+});
+
+function autoGrow() {
+  msgInput.style.height = 'auto';
+  msgInput.style.height = Math.min(msgInput.scrollHeight, 200) + 'px';
+}
+
+/* ═══════════════ WALL RENDERING ═══════════════ */
+function showEmpty() {
+  if (emptyNode) return;
+  emptyNode = document.createElement('div');
+  emptyNode.className = 'empty';
+  emptyNode.innerHTML = '<b>👻</b>it is dead silent in here.<br>be the first one to say something.';
+  wall.appendChild(emptyNode);
+}
+function hideEmpty() {
+  if (emptyNode) { emptyNode.remove(); emptyNode = null; }
+}
+
+function atBottom() {
+  return wall.scrollHeight - wall.scrollTop - wall.clientHeight < 200;
+}
+
+function updateCountPill() {
+  $('#msgCount').textContent = msgTotal > 99 ? '99+' : String(msgTotal);
+}
+
+function renderMessage(id, m) {
+  const stick = atBottom();
+  hideEmpty();
+
+  const row = document.createElement('div');
+  row.className = 'msg';
+  row.dataset.id = id;
+
+  const pfp = document.createElement('div');
+  pfp.className = 'pfp';
+  pfp.style.background = gradFor(m.n || '?');
+  pfp.textContent = m.a || initials(m.n || '?');
+
+  const body = document.createElement('div');
+  body.className = 'body';
+
+  const top = document.createElement('div');
+  top.className = 'top';
+
+  const nm = document.createElement('span');
+  nm.className = 'nm';
+  nm.textContent = m.n || 'someone';
+  top.appendChild(nm);
+
+  if (m.u && m.u === me.uid) {
+    const you = document.createElement('span');
+    you.className = 'you';
+    you.textContent = 'you';
+    top.appendChild(you);
+  }
+
+  const tm = document.createElement('span');
+  tm.className = 'tm';
+  tm.textContent = timeLabel(m.ts);
+  top.appendChild(tm);
+
+  body.appendChild(top);
+
+  if (m.t && typeof m.t === 'string') {
+    const tx = document.createElement('div');
+    tx.className = 'tx';
+    tx.textContent = m.t;
+    body.appendChild(tx);
+  }
+
+  if (typeof m.img === 'string' && m.img.startsWith('data:image/')) {
+    const img = document.createElement('img');
+    img.className = 'msgimg';
+    img.src = m.img;
+    img.alt = 'photo from ' + (m.n || 'someone');
+    img.loading = 'lazy';
+    img.addEventListener('click', () => openLightbox(m.img));
+    body.appendChild(img);
+  }
+
+  row.append(pfp, body);
+  wall.appendChild(row);
+
+  if (stick) wall.scrollTop = wall.scrollHeight;
+}
+
+/* ═══════════════ LIVE LISTENER ═══════════════ */
+function listen() {
+  if (listening) return;
+  listening = true;
+
+  const q = query(ref(db, 'messages'), limitToLast(MAX_MESSAGES));
+
+  onChildAdded(q, snap => {
+    const m = snap.val();
+    if (!m || typeof m !== 'object') return;
+    if (!m.t && !m.img) return;
+    if (wall.querySelector(`[data-id="${snap.key}"]`)) return;
+
+    renderMessage(snap.key, m);
+    msgTotal++;
+    updateCountPill();
+  }, err => {
+    console.error(err);
+    toast('cannot reach the wall 😬 — check firebase rules');
+  });
+
+  setTimeout(() => { if (!wall.querySelector('.msg')) showEmpty(); }, 1700);
+
+  watchConnection();
+}
+
+/* ═══════════════ COOLDOWN ═══════════════ */
+function startCooldown() {
+  cooldownEnd = Date.now() + COOLDOWN;
+  sendBtn.classList.add('cooling');
+  sendBtn.disabled = true;
+  paintCooldown();
+}
+
+function paintCooldown() {
+  const left = cooldownEnd - Date.now();
+
+  if (left <= 0) {
+    sendBtn.classList.remove('cooling');
+    sendBtn.disabled = false;
+    ringFg.style.strokeDashoffset = String(RING_CIRC);
+    sendNum.textContent = '';
+    $('#actionTitle').textContent = 'send it';
+    $('#actionSub').textContent = 'be nice · 5s cooldown';
+    return;
+  }
+
+  const p = left / COOLDOWN;
+  ringFg.style.strokeDashoffset = String(RING_CIRC * (1 - p));
+
+  const secs = Math.ceil(left / 1000);
+  sendNum.textContent = String(secs);
+  $('#actionTitle').textContent = 'slow mode';
+  $('#actionSub').textContent = `next message in ${secs}s`;
+
+  requestAnimationFrame(paintCooldown);
+}
+
+/* ═══════════════ IMAGE PICKING ═══════════════ */
+async function handleFile(file) {
+  if (!file) return;
+  if (!file.type.startsWith('image/')) { toast('that is not an image 🤨'); return; }
+  if (file.size > 12 * 1024 * 1024) { toast('that photo is massive — try a smaller one'); return; }
+
+  toast('compressing photo…');
+
+  try {
+    const { data, bytes } = await compressImage(file);
+    pendingImage = data;
+
+    $('#previewImg').src = data;
+    $('#previewMeta').textContent =
+      `${Math.round(bytes / 1024)} kb · compressed & ready`;
+    $('#preview').classList.remove('hidden');
+    $('#attachBtn').classList.add('on');
+    toast('photo attached ✅');
+  } catch (e) {
+    console.error(e);
+    toast('could not process that photo 😬');
+  }
+}
+
+function clearImage() {
+  pendingImage = null;
+  $('#preview').classList.add('hidden');
+  $('#previewImg').removeAttribute('src');
+  $('#previewMeta').textContent = '';
+  $('#attachBtn').classList.remove('on');
+  fileInput.value = '';
+}
+
+$('#attachBtn').addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', e => handleFile(e.target.files?.[0]));
+$('#previewX').addEventListener('click', clearImage);
+
+/* paste an image straight in */
+msgInput.addEventListener('paste', e => {
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  for (const it of items) {
+    if (it.type && it.type.startsWith('image/')) {
+      e.preventDefault();
+      handleFile(it.getAsFile());
+      return;
+    }
+  }
+});
+
+/* drag & drop onto the composer */
+const dropzone = $('#dropzone');
+const inputwrap = $('#inputwrap');
+['dragenter', 'dragover'].forEach(ev => {
+  dropzone.addEventListener(ev, e => {
+    e.preventDefault();
+    inputwrap.classList.add('drag');
+  });
+});
+['dragleave', 'drop'].forEach(ev => {
+  dropzone.addEventListener(ev, e => {
+    e.preventDefault();
+    if (ev === 'dragleave' && dropzone.contains(e.relatedTarget)) return;
+    inputwrap.classList.remove('drag');
+  });
+});
+dropzone.addEventListener('drop', e => {
+  const f = e.dataTransfer?.files?.[0];
+  if (f) handleFile(f);
+});
+
+/* ═══════════════ SENDING ═══════════════ */
+async function send() {
+  if (sending) return;
+  if (Date.now() < cooldownEnd) return;
+
+  const raw = msgInput.value.trim();
+
+  if (!raw && !pendingImage) { toast('type something or add a photo 🙂'); return; }
+  if (raw && raw === lastText && !pendingImage) { toast('u just said that 💀'); return; }
+
+  sending = true;
+  sendBtn.disabled = true;
+
+  const clean = raw ? maskProfanity(raw) : '';
+
+  try {
+    await push(ref(db, 'messages'), {
+      n: me.name,
+      a: me.avatar,
+      u: me.uid,
+      t: clean,
+      img: pendingImage || null,
+      ts: serverTimestamp()
+    });
+
+    lastText = raw;
+    msgInput.value = '';
+    autoGrow();
+    updateCount();
+    clearImage();
+    startCooldown();
+  } catch (e) {
+    console.error(e);
+    toast('message failed to send 💀 try again');
+  } finally {
+    sending = false;
+    if (Date.now() >= cooldownEnd) sendBtn.disabled = false;
+  }
+}
+
+sendBtn.addEventListener('click', send);
+msgInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+});
+
+/* ═══════════════ LIGHTBOX ═══════════════ */
+const lightbox = $('#lightbox');
+const lightboxImg = $('#lightboxImg');
+
+function openLightbox(src) {
+  lightboxImg.src = src;
+  lightbox.classList.remove('hidden');
+}
+function closeLightbox() {
+  lightbox.classList.add('hidden');
+  lightboxImg.removeAttribute('src');
+}
+lightbox.addEventListener('click', closeLightbox);
+$('#lbClose').addEventListener('click', e => { e.stopPropagation(); closeLightbox(); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeLightbox();
+});
+
+/* ═══════════════ BOOT ═══════════════ */
+(function boot() {
+  const savedName   = localStorage.getItem('wall.name');
+  const savedAvatar = localStorage.getItem('wall.avatar') ?? '';
+  const savedUid    = localStorage.getItem('wall.uid');
+
+  if (savedName) {
+    const res = validateName(savedName);
+    if (res.ok) {
+      me.name   = res.name;
+      me.avatar = AVATARS.includes(savedAvatar) ? savedAvatar : '';
+      me.uid    = savedUid || uid();
+      localStorage.setItem('wall.uid', me.uid);
+      startApp();
+      return;
+    }
+    localStorage.removeItem('wall.name');
+  }
+
+  pickedAvatar = '';
+  nameInput.focus();
+})();
+</script>
+</body>
+</html>
